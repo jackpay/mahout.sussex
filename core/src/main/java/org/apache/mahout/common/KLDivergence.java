@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -54,7 +55,6 @@ public class KLDivergence extends AbstractJob{
 		
 		conf = new Configuration();
 
-		//SequenceFileIterator<IntWritable,VectorWritable> sfi = new SequenceFileIterator<IntWritable,VectorWritable>(new Path(getOption(corpus)), true, conf);
 		Pair<IntWritable,VectorWritable> td = getTargetVector(Integer.valueOf(getOption(targDoc)), new SequenceFileIterator<IntWritable,VectorWritable>(new Path(getOption(corpus)), true, conf));
 		if(td == null){
 			throw new Exception("Target value not in corpus");
@@ -75,10 +75,10 @@ public class KLDivergence extends AbstractJob{
 				topics.add(Integer.valueOf(f.getName()));
 			}
 		}
-		int[] tops = new int[topics.size()];
-		for(int i = 0; i < topics.size(); i++){
-			tops[i] = topics.get(i).intValue(); 
-		}
+//		int[] tops = new int[topics.size()];
+//		for(int i = 0; i < topics.size(); i++){
+//			tops[i] = topics.get(i); 
+//		}
 		
 		for(File f : files){
 			if(!f.isHidden()){
@@ -86,7 +86,7 @@ public class KLDivergence extends AbstractJob{
 				ArrayList<Pair<Double, Pair<IntWritable,VectorWritable>>> scores = new ArrayList<Pair<Double, Pair<IntWritable,VectorWritable>>>();
 				while(it.hasNext()){
 					final Pair<IntWritable,VectorWritable> next = it.next();
-					scores.add(KLDivergencePair(td, next, tops));
+					scores.add(KLDivergencePair(td, next, topics));
 				}
 				Collections.sort(scores, new ScorePairComparator());
 				for(Pair<Double, Pair<IntWritable,VectorWritable>> pair : scores){
@@ -167,21 +167,28 @@ public class KLDivergence extends AbstractJob{
 		return null;
 	}
 	
-	public Pair<Double,Pair<IntWritable, VectorWritable>> KLDivergencePair(Pair<IntWritable,VectorWritable> targ, Pair<IntWritable,VectorWritable> comp, int[] topics) throws Exception{
+	public Pair<Double,Pair<IntWritable, VectorWritable>> KLDivergencePair(Pair<IntWritable,VectorWritable> targ, Pair<IntWritable,VectorWritable> comp, ArrayList<Integer> topics) throws Exception{
 		if(targ.getSecond().get().size() != comp.getSecond().get().size()){
 			throw new Exception("Vectors to be compared must be of the same length. Target size = " + targ.getSecond().get().size() + " and comparator size = " + comp.getSecond().get().size());
 		}
 		
-		double score = 0.0;
-//		for(int i = 0; i < topics.length; i++){
-//			
-//		}
-//		for(int i = 0; i < topics.length; i++){
-//			score += (targ.getSecond().get().get(topics[i]) - comp.getSecond().get().get(topics[i])) * Math.log((targ.getSecond().get().get(i)/comp.getSecond().get().get(i)));
-//		}
-		for(int i = 0; i < targ.getSecond().get().size(); i++){
-			score += (targ.getSecond().get().get(i) - comp.getSecond().get().get(i)) * Math.log((targ.getSecond().get().get(i)/comp.getSecond().get().get(i)));
+		
+		VectorWritable targVals = new VectorWritable();
+		VectorWritable compVals = new VectorWritable();
+		for(int i = 0; i < topics.size(); i++){
+			targVals.get().assign(targ.getSecond().get().get(topics.get(i)));
+			compVals.get().assign(comp.getSecond().get().get(topics.get(i)));
 		}
+		targVals.get().norm(1.0);
+		compVals.get().norm(1.0);
+		
+		double score = 0.0;
+		for(int i = 0; i < topics.size(); i++){
+			score += (targVals.get().get(i) - compVals.get().get(i)) * Math.log((targVals.get().get(i)/compVals.get().get(i)));
+		}
+//		for(int i = 0; i < targ.getSecond().get().size(); i++){
+//			score += (targ.getSecond().get().get(i) - comp.getSecond().get().get(i)) * Math.log((targ.getSecond().get().get(i)/comp.getSecond().get().get(i)));
+//		}
 		return new Pair<Double,Pair<IntWritable, VectorWritable>>(new Double(score), clonePair(comp));
 	}
 	
